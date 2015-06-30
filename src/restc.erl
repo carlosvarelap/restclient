@@ -32,6 +32,7 @@
 -export([request/4]).
 -export([request/5]).
 -export([request/6]).
+-export([request/7]).
 
 -type method()       :: binary | head | get | put | post | trace | options | delete.
 -type url()          :: binary | string().
@@ -47,6 +48,8 @@
 -type response()     :: {ok, Status::status_code(), Headers::headers(), Body::body()} |
                         {error, Status::status_code(), Headers::headers(), Body::body()} |
                         {error, Reason::reason()}.
+-type options()      :: list({proxy, {Host::binary(), Port::non_neg_integer()}}).
+
 
 -define(DEFAULT_ENCODING, json).
 -define(DEFAULT_CTYPE, <<"application/json">>).
@@ -80,10 +83,16 @@ request(Method, Type, Url, Expect, Headers) ->
 -spec request(Method::method(), Type::content_type(), Url::url(),
               Expect::status_codes(), Headers::headers(), Body::body()) -> Response::response().
 request(Method, Type, Url, Expect, Headers, Body) ->
+    request(Method, Type, Url, Expect, Headers, Body, []).
+
+-spec request(Method::method(), Type::content_type(), Url::url(),
+              Expect::status_codes(), Headers::headers(), Body::body(),
+              Options::options()) -> Response::response().
+request(Method, Type, Url, Expect, Headers, Body, Options) ->
     AccessType = get_accesstype(Type),
     Headers1 = [{<<"Accept">>, <<AccessType/binary, ", */*;q=0.9">>} | Headers],
     Headers2 = [{<<"Content-Type">>, get_ctype(Type)} | Headers1],
-    Response = parse_response(do_request(Method, Type, Url, Headers2, Body)),
+    Response = parse_response(do_request(Method, Type, Url, Headers2, Body, Options)),
     case Response of
         {ok, Status, H, B} ->
             case check_expect(Status, Expect) of
@@ -98,14 +107,14 @@ request(Method, Type, Url, Expect, Headers, Body) ->
 %%% INTERNAL ===================================================================
 
 
-do_request(post, Type, Url, Headers, Body) ->
+do_request(post, Type, Url, Headers, Body, Options) ->
     Body2 = encode_body(Type, Body),
-    hackney:request(post, Url, Headers, Body2);
-do_request(put, Type, Url, Headers, Body) ->
+    hackney:request(post, Url, Headers, Body2, Options);
+do_request(put, Type, Url, Headers, Body, Options) ->
     Body2 = encode_body(Type, Body),
-    hackney:request(put, Url, Headers, Body2);
-do_request(Method, _, Url, Headers, _) ->
-    hackney:request(Method, Url, Headers).
+    hackney:request(put, Url, Headers, Body2, Options);
+do_request(Method, _, Url, Headers, _, Options) ->
+    hackney:request(Method, Url, Headers, <<>>, Options).
 
 check_expect(_Status, []) ->
     true;
